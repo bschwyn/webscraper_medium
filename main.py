@@ -1,6 +1,4 @@
-"""
 
-"""
 
 import re
 import json
@@ -25,8 +23,88 @@ async def root():
     soup = BeautifulSoup(html.read(), 'html.parser')
     return soup
 
-def get_lastest():
-    pass
+def get_links():
+    # tag list from https://medium.com/feedium/list-of-medium-top-writer-tags-number-of-hits-and-amount-of-writers-34ce3f4234a6
+    # given a list of tags where top writer topics are listed, then make a list of archive urls
+    # each archive page will have links to the articles published that day.
+    # after getting a list of archive urls
+    # go through with beautiful soup and scrape the url, and parse the html to get links to articles
+
+    # another thing to try would be to go through each publication
+    #     url = f'https://medium.com/{publication_name}/archive/2022/{month}/{day}'
+    # https://hackernoon.com/how-to-scrape-a-medium-publication-a-python-tutorial-for-beginners-o8u3t69
+
+    with open("top_writer_topics.txt") as topics:
+         topic_list = topics.read()
+
+    # formate topic tags
+    tag_list = [tag.replace(" ","-") for tag in topic_list]
+
+    # get the list of archive urls
+    url_list = []
+    for tag in tag_list:
+        for month in range(1, 7): # june is last month, 13 for full year
+            if month in [1, 3, 5, 7, 8, 10, 12]:
+                n_days = 31
+            elif month in [4, 6, 9, 11]:
+                n_days = 30
+            else:
+                n_days = 28
+
+            for day in range(1, n_days + 1):
+
+                month, day = str(month), str(day)
+
+                if len(month) == 1:
+                    month = f'0{month}'
+                if len(day) == 1:
+                    day = f'0{day}'
+                url = f'https://medium.com/tag/{tag}/archive/2022/{month}/{day}'
+                url_list.append(url)
+
+    # note these urls have a set of "related tags" inside the class "tags tags--postTags tags--light"
+    # which could be added to the tags list
+
+    # should be ~100 tags * 100 days ~ 10k urls
+
+    # testing url_list = ["https://medium.com/tag/self-driving-cars/archive/2022/01/17"]
+    # get stories
+    article_links = []
+
+    for url in url_list:
+        try:
+            user_agents = [
+                'Mozilla/5.0 (X11; CrOS x86_64 10066.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36',
+                'XYZ/3.0',
+                'Mozilla/5.0']
+
+            req = Request(url, headers={'User-Agent': user_agents[3]})
+            page = urlopen(req, timeout=10)
+            soup = BeautifulSoup(page, 'html.parser')
+
+            #get links from page
+            data_source = soup.find_all('div', attrs={'data-source':True})
+            for data in data_source:
+                refs = data.find_all('a', attrs={'href':True})
+
+                for r in refs:
+                    if r.get('data-action-source'): # odd how '... in r' doesn't work
+                        if r['data-action-source'] == 'preview-listing':
+                            article_links.append(r['data-action-value'])
+        except:
+            continue
+
+        if len(article_links) > 100:
+            break
+    print(article_links)
+
+    #save links to file
+    with open('links.txt', 'w') as file:
+        for line in article_links:
+            file.write(f"{line}\n")
+
+
 
 def scrape():
     #url = 'https://medium.com/swlh/high-performers-dont-quit-jobs-they-quietly-quit-these-things-e4eff96d4c51'
@@ -81,6 +159,9 @@ def scrape():
     responses = None
     reading_time = None
 
+    # If I can get detailed div tags then try following:
+    # https://hackernoon.com/how-to-scrape-a-medium-publication-a-python-tutorial-for-beginners-o8u3t69
+
     #parse "window.__APOLLO_STATE__", a script where a bunch of data is stored
     apollo_window = "window.__APOLLO_STATE__ = "
     pattern = re.compile("^" + apollo_window)
@@ -126,4 +207,5 @@ def scrape():
     print(data_model)
 
 if __name__ == '__main__':
-    scrape()
+    get_links()
+    #scrape()
